@@ -6,20 +6,24 @@
  */
 #include "buzzer.h"
 
+#include "timer.h"
+
+#include "stm32f1xx_hal.h"
+
 /**
  * @brief Timer prescaler for buzzer pwm.
  * 
  * @note ARR will be modified to generate the frequencies.
  */
-#define BUZZER_PWM_PSC  71
-#define BUZZER_PWM_ARR  999
 
 /**
  * @brief Buzzer main frequency.
  * 
  * Frequency generated after the prescaler (without ARR).
  */
-#define BUZZER_PWM_MAIN_FREQ  1000000
+#define BUZZER_PWM_MAIN_FREQ    1000000
+#define BUZZER_PWM_PSC          ((72000000 / BUZZER_PWM_MAIN_FREQ) - 1)
+#define BUZZER_PWM_ARR          999
 
 static uint32_t buzzer_note_freq[BUZZER_NOTE_NR] = { 131, 147, 165, 175, 196, 220, 247, 262, 294, 330, 349, 392, 440, 494, 0 };
 
@@ -27,7 +31,15 @@ static uint32_t buzzer_note_freq[BUZZER_NOTE_NR] = { 131, 147, 165, 175, 196, 22
  * @brief Sets up buzzer pin and peripherals.
  */
 void buzzer_setup(void) {
-    gpio_setup(BUZZER_PORT, BUZZER_PIN, GPIO_MODE_OUTPUT_50, GPIO_CFG_OUT_AF_PUSH_PULL);
+    BUZZER_GPIO_CLOCK_ENABLE();
+
+    GPIO_InitTypeDef gpio_init = {
+        .Pin = BUZZER_PIN,
+        .Mode = GPIO_MODE_AF_PP,
+        .Pull = GPIO_NOPULL,
+        .Speed = GPIO_SPEED_FREQ_HIGH,
+    };
+    HAL_GPIO_Init(BUZZER_PORT, &gpio_init);
 
     timer_setup(BUZZER_TIMER, BUZZER_PWM_PSC, BUZZER_PWM_ARR);
     timer_pwm_setup(BUZZER_TIMER, BUZZER_PWM_CH);

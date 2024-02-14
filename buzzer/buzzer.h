@@ -7,15 +7,13 @@
 #ifndef BUZZER_H
 #define BUZZER_H
 
-#include "gpio.h"
-#include "timer.h"
-
 #if !defined(BUZZER_PORT)
-    #define BUZZER_PORT     GPIO_PORTA
+    #define BUZZER_PORT                 GPIOA
+    #define BUZZER_GPIO_CLOCK_ENABLE()  __HAL_RCC_GPIOA_CLK_ENABLE()
 #endif
 
 #if !defined(BUZZER_PIN)
-    #define BUZZER_PIN      3
+    #define BUZZER_PIN      GPIO_PIN_3
 #endif
 
 #if !defined(BUZZER_TIMER)

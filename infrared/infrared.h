@@ -7,18 +7,15 @@
 #ifndef INFRARED_H
 #define INFRARED_H
 
-#include "gpio.h"
-
 #include <stdint.h>
 
-#include "timer.h"
-
 #if !defined(INFRARED_PORT)
-    #define INFRARED_PORT     GPIO_PORTB
+    #define INFRARED_PORT                   GPIOB
+    #define INFRARED_GPIO_CLOCK_ENABLE()    __HAL_RCC_GPIOB_CLK_ENABLE()
 #endif
 
 #if !defined(INFRARED_PIN)
-    #define INFRARED_PIN      6
+    #define INFRARED_PIN        GPIO_PIN_6
 #endif
 
 #if !defined(INFRARED_TIMER)

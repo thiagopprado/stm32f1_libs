@@ -9,6 +9,10 @@
 #include <string.h>
 #include <stdbool.h>
 
+#include "stm32f1xx_hal.h"
+
+#include "timer.h"
+
 #define BIT_CHECK(value, bit)       ((value >> bit) & 0x01)
 #define BIT_SET(value, bit)         (value |= 1 << bit)
 #define BIT_CLEAR(value, bit)       (value &= ~(1 << bit))
@@ -93,8 +97,8 @@ typedef struct {
     uint16_t last_timeshot;
 } infrared_rc6_ctrl_t;
 
-static infrared_nec_ctrl_t nec_ctrl;
-static infrared_rc6_ctrl_t rc6_ctrl;
+static infrared_nec_ctrl_t nec_ctrl = { 0 };
+static infrared_rc6_ctrl_t rc6_ctrl = { 0 };
 
 static void infrared_nec_read(uint16_t timeshot);
 static void infrared_rc6_read(uint16_t timeshot);
@@ -107,7 +111,7 @@ static void infrared_input_capture_callback(void);
  */
 static void infrared_nec_read(uint16_t timeshot) {
     uint16_t time_interval = timeshot - nec_ctrl.last_timeshot;
-    bool pin_value = gpio_read(INFRARED_PORT, INFRARED_PIN);
+    bool pin_value = HAL_GPIO_ReadPin(INFRARED_PORT, INFRARED_PIN) == GPIO_PIN_SET;
 
     nec_ctrl.last_timeshot = timeshot;
 
@@ -191,7 +195,7 @@ static void infrared_nec_read(uint16_t timeshot) {
  */
 static void infrared_rc6_read(uint16_t timeshot) {
     uint16_t time_interval = timeshot - rc6_ctrl.last_timeshot;
-    bool pin_value = gpio_read(INFRARED_PORT, INFRARED_PIN);
+    bool pin_value = HAL_GPIO_ReadPin(INFRARED_PORT, INFRARED_PIN) == GPIO_PIN_SET;
 
     rc6_ctrl.last_timeshot = timeshot;
 
@@ -326,10 +330,16 @@ static void infrared_input_capture_callback(void) {
  * @brief Sets up infrared pin and timer.
  */
 void infrared_setup(void) {
-    memset(&nec_ctrl, 0, sizeof(infrared_nec_ctrl_t));
-    memset(&rc6_ctrl, 0, sizeof(infrared_rc6_ctrl_t));
+    INFRARED_GPIO_CLOCK_ENABLE();
 
-    gpio_setup(INFRARED_PORT, INFRARED_PIN, GPIO_MODE_INPUT, GPIO_CFG_IN_FLOAT);
+    GPIO_InitTypeDef gpio_init = {
+        .Pin = INFRARED_PIN,
+        .Mode = GPIO_MODE_AF_INPUT,
+        .Pull = GPIO_NOPULL,
+        .Speed = GPIO_SPEED_FREQ_HIGH,
+    };
+    HAL_GPIO_Init(INFRARED_PORT, &gpio_init);
+
     timer_setup(INFRARED_TIMER, 7199, 0xFFFF);
     timer_input_capture_setup(INFRARED_TIMER, INFRARED_IC_CH);
     timer_invert_input_capture_polarity(INFRARED_TIMER, INFRARED_IC_CH);
