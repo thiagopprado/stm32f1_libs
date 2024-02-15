@@ -21,7 +21,8 @@
 #if !defined(INFRARED_TIMER)
     #define INFRARED_TIMER                  TIM4
     #define INFRARED_PWM_CLOCK_ENABLE()     __HAL_RCC_TIM4_CLK_ENABLE()
-    #define INFRARED_TIMER_IRQ              TIM4_IRQHandler
+    #define INFRARED_TIMER_IRQ_HANDLER      TIM4_IRQHandler
+    #define INFRARED_TIMER_IRQN             TIM4_IRQn
 #endif
 
 #if !defined(INFRARED_IC_CH)

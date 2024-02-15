@@ -98,6 +98,9 @@ typedef struct {
 #define IR_RC6_CODE_RIGHT           0xda00
 /** @} */
 
+#define INFRARED_TIMER_ISR_PRIORITY 5
+#define INFRARED_TIMER_PRESCALER    7199
+
 /* Private variables ---------------------------------------------------------*/
 static infrared_nec_ctrl_t nec_ctrl = { 0 };
 static infrared_rc6_ctrl_t rc6_ctrl = { 0 };
@@ -341,7 +344,7 @@ static void infrared_input_capture_callback(TIM_HandleTypeDef *htim) {
 /**
  * @brief Timer IRQ handler.
  */
-void INFRARED_TIMER_IRQ(void) {
+void INFRARED_TIMER_IRQ_HANDLER(void) {
     HAL_TIM_IRQHandler(&timer_handle);
 }
 
@@ -360,13 +363,13 @@ void infrared_setup(void) {
     };
     HAL_GPIO_Init(INFRARED_PORT, &gpio_init);
 
-    HAL_NVIC_SetPriority(TIM4_IRQn, 5, 0);
-    HAL_NVIC_EnableIRQ(TIM4_IRQn);
+    HAL_NVIC_SetPriority(INFRARED_TIMER_IRQN, INFRARED_TIMER_ISR_PRIORITY, 0);
+    HAL_NVIC_EnableIRQ(INFRARED_TIMER_IRQN);
 
     INFRARED_PWM_CLOCK_ENABLE();
 
     timer_handle.Instance = INFRARED_TIMER;
-    timer_handle.Init.Prescaler = 7199;
+    timer_handle.Init.Prescaler = INFRARED_TIMER_PRESCALER;
     timer_handle.Init.Period = 0xFFFF;
     timer_handle.Init.CounterMode = TIM_COUNTERMODE_UP;
     timer_handle.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
