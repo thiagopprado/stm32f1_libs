@@ -4,6 +4,7 @@
  * @brief Infrared module implementation.
  * 
  */
+/* Includes ------------------------------------------------------------------*/
 #include "infrared.h"
 
 #include <string.h>
@@ -11,8 +12,45 @@
 
 #include "stm32f1xx_hal.h"
 
-#include "timer.h"
+/* Private types -------------------------------------------------------------*/
+typedef enum {
+    IR_NEC_STATE_INIT = 0,
+    IR_NEC_STATE_START,
+    IR_NEC_STATE_READ_WAIT,
+    IR_NEC_STATE_READ_GET,
+    IR_NEC_STATE_STOP,
+} infrared_nec_state_t;
 
+typedef enum {
+    IR_RC6_STATE_INIT = 0,
+    IR_RC6_STATE_START_1,
+    IR_RC6_STATE_START_2,
+    IR_RC6_STATE_START_3,
+    IR_RC6_STATE_READ_FIELD_WAIT,
+    IR_RC6_STATE_READ_TOGGLE_1,
+    IR_RC6_STATE_READ_TOGGLE_2,
+    IR_RC6_STATE_READ_GET,
+} infrared_rc6_state_t;
+
+typedef struct {
+    infrared_nec_state_t state;
+    uint32_t value;
+    uint32_t new_value;
+    int8_t bit_idx;
+    uint16_t last_timeshot;
+} infrared_nec_ctrl_t;
+
+typedef struct {
+    infrared_rc6_state_t state;
+    uint16_t value;
+    uint16_t new_value;
+    int8_t bit_idx;
+    uint8_t field_bits_nr;
+    bool transition_ctrl;
+    uint16_t last_timeshot;
+} infrared_rc6_ctrl_t;
+
+/* Private defines -----------------------------------------------------------*/
 #define BIT_CHECK(value, bit)       ((value >> bit) & 0x01)
 #define BIT_SET(value, bit)         (value |= 1 << bit)
 #define BIT_CLEAR(value, bit)       (value &= ~(1 << bit))
@@ -60,50 +98,17 @@
 #define IR_RC6_CODE_RIGHT           0xda00
 /** @} */
 
-typedef enum {
-    IR_NEC_STATE_INIT = 0,
-    IR_NEC_STATE_START,
-    IR_NEC_STATE_READ_WAIT,
-    IR_NEC_STATE_READ_GET,
-    IR_NEC_STATE_STOP,
-} infrared_nec_state_t;
-
-typedef enum {
-    IR_RC6_STATE_INIT = 0,
-    IR_RC6_STATE_START_1,
-    IR_RC6_STATE_START_2,
-    IR_RC6_STATE_START_3,
-    IR_RC6_STATE_READ_FIELD_WAIT,
-    IR_RC6_STATE_READ_TOGGLE_1,
-    IR_RC6_STATE_READ_TOGGLE_2,
-    IR_RC6_STATE_READ_GET,
-} infrared_rc6_state_t;
-
-typedef struct {
-    infrared_nec_state_t state;
-    uint32_t value;
-    uint32_t new_value;
-    int8_t bit_idx;
-    uint16_t last_timeshot;
-} infrared_nec_ctrl_t;
-
-typedef struct {
-    infrared_rc6_state_t state;
-    uint16_t value;
-    uint16_t new_value;
-    int8_t bit_idx;
-    uint8_t field_bits_nr;
-    bool transition_ctrl;
-    uint16_t last_timeshot;
-} infrared_rc6_ctrl_t;
-
+/* Private variables ---------------------------------------------------------*/
 static infrared_nec_ctrl_t nec_ctrl = { 0 };
 static infrared_rc6_ctrl_t rc6_ctrl = { 0 };
+static TIM_HandleTypeDef timer_handle = { 0 };
 
+/* Private function prototypes -----------------------------------------------*/
 static void infrared_nec_read(uint16_t timeshot);
 static void infrared_rc6_read(uint16_t timeshot);
-static void infrared_input_capture_callback(void);
+static void infrared_input_capture_callback(TIM_HandleTypeDef *htim);
 
+/* Private function implementation--------------------------------------------*/
 /**
  * @brief NEC state machine.
  * 
@@ -318,14 +323,29 @@ static void infrared_rc6_read(uint16_t timeshot) {
 /**
  * @brief Input Capture callback.
  */
-static void infrared_input_capture_callback(void) {
-    uint16_t ic_timeshot = timer_get_input_capture_counter(INFRARED_TIMER, INFRARED_IC_CH);
+static void infrared_input_capture_callback(TIM_HandleTypeDef *htim) {
+    static uint32_t ic_polarity = TIM_ICPOLARITY_FALLING;
+    uint16_t ic_timeshot = HAL_TIM_ReadCapturedValue(htim, INFRARED_IC_CH);
 
-    timer_invert_input_capture_polarity(INFRARED_TIMER, INFRARED_IC_CH);
+    if (ic_polarity == TIM_ICPOLARITY_FALLING) {
+        ic_polarity = TIM_ICPOLARITY_RISING;
+    } else {
+        ic_polarity = TIM_ICPOLARITY_FALLING;
+    }
+    __HAL_TIM_SET_CAPTUREPOLARITY(htim, INFRARED_IC_CH, ic_polarity);
+
     infrared_nec_read(ic_timeshot);
     infrared_rc6_read(ic_timeshot);
 }
 
+/**
+ * @brief Timer IRQ handler.
+ */
+void INFRARED_TIMER_IRQ(void) {
+    HAL_TIM_IRQHandler(&timer_handle);
+}
+
+/* Public functions ----------------------------------------------------------*/
 /**
  * @brief Sets up infrared pin and timer.
  */
@@ -340,10 +360,26 @@ void infrared_setup(void) {
     };
     HAL_GPIO_Init(INFRARED_PORT, &gpio_init);
 
-    timer_setup(INFRARED_TIMER, 7199, 0xFFFF);
-    timer_input_capture_setup(INFRARED_TIMER, INFRARED_IC_CH);
-    timer_invert_input_capture_polarity(INFRARED_TIMER, INFRARED_IC_CH);
-    timer_attach_input_capture_callback(INFRARED_TIMER, INFRARED_IC_CH, infrared_input_capture_callback);
+    HAL_NVIC_SetPriority(TIM4_IRQn, 5, 0);
+    HAL_NVIC_EnableIRQ(TIM4_IRQn);
+
+    INFRARED_PWM_CLOCK_ENABLE();
+
+    timer_handle.Instance = INFRARED_TIMER;
+    timer_handle.Init.Prescaler = 7199;
+    timer_handle.Init.Period = 0xFFFF;
+    timer_handle.Init.CounterMode = TIM_COUNTERMODE_UP;
+    timer_handle.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+    HAL_TIM_IC_Init(&timer_handle);
+    HAL_TIM_RegisterCallback(&timer_handle, HAL_TIM_IC_CAPTURE_CB_ID, infrared_input_capture_callback);
+
+    TIM_IC_InitTypeDef input_capture_config = { 0 };
+    input_capture_config.ICPolarity = TIM_ICPOLARITY_FALLING;
+    input_capture_config.ICSelection = TIM_ICSELECTION_DIRECTTI;
+    input_capture_config.ICPrescaler = TIM_ICPSC_DIV1;
+    HAL_TIM_IC_ConfigChannel(&timer_handle, &input_capture_config, INFRARED_IC_CH);
+
+    HAL_TIM_IC_Start_IT(&timer_handle, INFRARED_IC_CH);
 }
 
 /**

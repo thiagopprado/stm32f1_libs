@@ -17,12 +17,12 @@
 #endif
 
 #if !defined(BUZZER_TIMER)
-    #define BUZZER_TIMER    TIM2
+    #define BUZZER_TIMER                TIM2
+    #define BUZZER_PWM_CLOCK_ENABLE()   __HAL_RCC_TIM2_CLK_ENABLE()
 #endif
 
 #if !defined(BUZZER_PWM_CH)
-    #define BUZZER_PWM_CH               TIM_CHANNEL_4
-    #define BUZZER_PWM_CLOCK_ENABLE()   __HAL_RCC_TIM2_CLK_ENABLE()
+    #define BUZZER_PWM_CH       TIM_CHANNEL_4
 #endif
 
 typedef enum {

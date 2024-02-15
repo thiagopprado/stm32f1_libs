@@ -19,11 +19,13 @@
 #endif
 
 #if !defined(INFRARED_TIMER)
-    #define INFRARED_TIMER     TIMER_4
+    #define INFRARED_TIMER                  TIM4
+    #define INFRARED_PWM_CLOCK_ENABLE()     __HAL_RCC_TIM4_CLK_ENABLE()
+    #define INFRARED_TIMER_IRQ              TIM4_IRQHandler
 #endif
 
 #if !defined(INFRARED_IC_CH)
-    #define INFRARED_IC_CH     TIMER_CH_1
+    #define INFRARED_IC_CH     TIM_CHANNEL_1
 #endif
 
 typedef enum {
